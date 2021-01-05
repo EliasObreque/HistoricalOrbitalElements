@@ -1,6 +1,12 @@
 # -*- coding: utf-8 -*-
 """
 @author: Elias Obreque
+
+ref:
+[1] https://www.celestrak.com/NORAD/documentation/tle-fmt.php
+[2] Sarah Elizabeth Bergstrom. An Algorithm for Reducing Atmospheric Density Model Errors Using Satellite Observation
+ Data in Real-Time
+[3] D. A. Vallado. Fundamentals of Astrodynamics and Applications. Space Technology series. McGraw-Hill. PAG 140
 """
 
 import matplotlib.pyplot as plt
@@ -8,9 +14,10 @@ import math
 import numpy as np
 
 
-NombreTle = 'GomX-4B'
-#NombreTle = 'sat42788'
+#NombreTle = 'GomX-4B'
+NombreTle = '1U_Cubesat/sat42788'
 
+sat_mass = 1.4
 
 m_earth     = 5.9722e24
 G           = 6.674e-11
@@ -42,16 +49,16 @@ def kepler_ite(mm, ecc):
 
 def getOE(Data):
     leng = len(Data)
-    i    = [ ]
-    e    = [ ]
-    n    = [ ]
-    a    = [ ]
-    raan = [ ]
-    ap   = [ ]
-    t    = [ ]
-    f    = [ ]
-    r    = [ ]
-    beta = [ ]
+    i    = []
+    e    = []
+    n    = []
+    a    = []
+    raan = []
+    ap   = []
+    t    = []
+    f    = []
+    r    = []
+    bstar = []
     con  = 0
     for k in range(leng-1):
         if Data[k][0] == '2':
@@ -69,16 +76,16 @@ def getOE(Data):
             r.append(((h**2)/mu)/(1 + e[con]*np.cos(f[con])))
             con = con + 1
         elif Data[k][0] == '1':
-            if float(Data[k][18:20])<20:
+            if float(Data[k][18:20]) < 20:
                 year = float('20'+Data[k][18:20])
             else:
                 year = float('19'+Data[k][18:20])    
             J0epoch = julianepoch(year)
             epoch   = float(Data[k][20:32])
             Jepoch  = J0epoch + epoch
-            beta.append(float(Data[k][53:59])*10**float(Data[k][59:61]))
+            bstar.append((float(Data[k][53:59]) / 100000.0) * 10 ** float(Data[k][59:61]))
             t.append(Jepoch)    
-    return i, a, n, e,  raan, ap, t, r, f, beta
+    return i, a, n, e,  raan, ap, t, r, f, bstar
 
 
 def Trap(fx, x):
@@ -93,13 +100,13 @@ TLE_read    = TLE_open.read()
 Data        = TLE_read.split('\n')
 TLE_open.close()
 
-inc, a, n, e, RAAN, AP, tJD, r, f, beta = getOE(Data)
+inc, a, n, e, RAAN, AP, tJD, r, f, bstar = getOE(Data)
 
 t = (np.array(tJD) - tJD[0])
 
 NumRev = Trap(n, t)
 
-KilTrav = 2*math.pi*(np.mean(a) + R_earth)*NumRev
+KilTrav = 2*math.pi*(np.mean(a) + R_earth) * NumRev
 
 print("Number of revolutions:", NumRev)
 print("Kilometers traveled:", KilTrav)
@@ -154,13 +161,32 @@ plt.plot(t, e)
 plt.grid()
 
 plt.figure()
-plt.title('Ballistic coefficient')
-plt.ylabel('beta [-]')
+plt.title('BStar')
+plt.ylabel('BStar [-]')
 plt.xlabel('Time [day]')
-plt.plot(t, beta)
+plt.plot(t, bstar)
+plt.grid()
+
+# Projected area approximation
+
+d0 = 2.461e-5   # kg/m2/RE
+RE = 6378.135   # km
+cd = 2.2
+true_ballistic_coefficient = d0 * RE / 2 / np.array(bstar)  # ref [2, 3]
+
+plt.figure()
+plt.title('True BC')
+plt.ylabel('True BC [m^2]')
+plt.xlabel('Time [day]')
+plt.plot(t, true_ballistic_coefficient)
+plt.grid()
+
+area = sat_mass / true_ballistic_coefficient / cd
+
+plt.figure()
+plt.title('Projected area')
+plt.ylabel('Area [m^2]')
+plt.xlabel('Time [day]')
+plt.plot(t, area)
 plt.grid()
 plt.show()
-
-
-
-
